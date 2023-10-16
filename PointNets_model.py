@@ -112,17 +112,19 @@ class PointNetSeg(nn.Module):
     def __init__(self, classes=3):
         super().__init__()
         self.pointnet = PointNet()
-        self.fc_bnn1 = FC_BNN(1024, 512)
-        self.fc2 = nn.Linear(512, 256)
-        self.bn2 = nn.BatchNorm1d(256)
-        self.fc3 = nn.Linear(256, classes)
+        self.mlp1 = MLP_CONV(1088, 512)
+        self.mlp2 = MLP_CONV(512, 256)
+        self.mlp3 = MLP_CONV(256, 128)
+        self.conv = nn.Conv1d(128, classes, 1)
+        self.logsoftmax = nn.LogSoftmax(dim=1)
     
     def forward(self, input):
         inputs, matrix3x3, matrix64x64 = self.pointnet(input)
         stack = torch.cat(inputs,1)
-        x = self.fc_bnn1(stack)
-        x = F.relu(self.bn2(self.dropout(self.fc2(x))))
-        output = self.fc3(x)
+        x = self.mlp1(stack)
+        x = self.mlp2(x)
+        x = self.mlp3(x)
+        output = self.conv(x)
         return self.logsoftmax(output), matrix3x3, matrix64x64
 
 
