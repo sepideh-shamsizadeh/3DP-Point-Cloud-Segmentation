@@ -5,79 +5,65 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 
-# Multi-Layer Perceptron with 1D Convolution and Batch Normalization
+# Multi Layer Perceptron
 class MLP_CONV(nn.Module):
-    def __init__(self, input_size, output_size):
-        super().__init__()
-        self.input_size = input_size
-        self.output_size = output_size
+   def __init__(self, input_size, output_size):
+     super().__init__()
+     self.input_size   = input_size
+     self.output_size  = output_size
+     self.conv  = nn.Conv1d(self.input_size, self.output_size, 1)
+     self.bn    = nn.BatchNorm1d(self.output_size)
 
-        # 1D convolutional layer with kernel size 1
-        self.conv = nn.Conv1d(self.input_size, self.output_size, 1)
-        
-        # Batch normalization for stability and faster training
-        self.bn = nn.BatchNorm1d(self.output_size)
+   def forward(self, input):
+     return F.relu(self.bn(self.conv(input)))
 
-    def forward(self, input):
-        # Applying convolution, batch normalization, and ReLU activation
-        return F.relu(self.bn(self.conv(input)))
+# Fully Connected with Batch Normalization
+class FC_BN(nn.Module):
+   def __init__(self, input_size, output_size):
+     super().__init__()
+     self.input_size   = input_size
+     self.output_size  = output_size
+     self.lin  = nn.Linear(self.input_size, self.output_size)
+     self.bn    = nn.BatchNorm1d(self.output_size)
 
-# Fully Connected Layer with Batch Normalization
-class FC_BNN(nn.Module):
-    def __init__(self, input_size, output_size):
-        super().__init__()
-        self.input_size = input_size
-        self.output_size = output_size
+   def forward(self, input):
+     return F.relu(self.bn(self.lin(input)))
 
-        # Fully connected layer
-        self.lin = nn.Linear(self.input_size, self.output_size)
-        
-        # Batch normalization for stability and faster training
-        self.bn = nn.BatchNorm1d(self.output_size)
-
-    def forward(self, input):
-        # Applying fully connected layer, batch normalization, and ReLU activation
-        return F.relu(self.bn(self.lin(input)))
-
-# Transformation Network (TNet)
 class TNet(nn.Module):
-    def __init__(self, k=3):
-        super().__init__()
-        self.k = k
+   def __init__(self, k=3):
+      super().__init__()
+      self.k=k
 
-        # Shared MLP layers
-        self.mlp1 = MLP_CONV(self.k, 64)
-        self.mlp2 = MLP_CONV(64, 128)
-        self.mlp3 = MLP_CONV(128, 1024)
+      self.mlp1 = MLP_CONV(self.k, 64)
+      self.mlp2 = MLP_CONV(64, 128)
+      self.mlp3 = MLP_CONV(128, 1024)
 
-        # Fully connected layers with batch normalization
-        self.fc_bn1 = FC_BNN(1024, 512)
-        self.fc_bn2 = FC_BNN(512, 256)
+      self.fc_bn1 = FC_BN(1024, 512)
+      self.fc_bn2 = FC_BN(512,256)
 
-        # Output layer for the transformation matrix
-        self.fc3 = nn.Linear(256, k*k)
+      self.fc3 = nn.Linear(256,k*k)
 
-    def forward(self, input):
-        bs = input.size(0)
 
-        # Applying shared MLP layers
-        x = self.mlp1(input)
-        x = self.mlp2(x)
-        x = self.mlp3(x)
+   def forward(self, input):
+      # input.shape == (batch_size,n,3)
 
-        # Global max pooling across points
-        pool = nn.MaxPool1d(x.size(-1))(x)
-        flat = nn.Flatten(1)(pool)
+      bs = input.size(0)
+      xb = self.mlp1(input)
+      xb = self.mlp2(xb)
+      xb = self.mlp3(xb)
 
-        # Initialize the transformation matrix as an identity matrix
-        init = torch.eye(self.k, requires_grad=True).repeat(bs, 1, 1)
-        if x.is_cuda:
-            init = init.cuda()
+      pool = nn.MaxPool1d(xb.size(-1))(xb)
+      flat = nn.Flatten(1)(pool)
 
-        # Apply the fully connected layer to obtain the transformation matrix
-        matrix = self.fc3(x).view(-1, self.k, self.k) + init
+      xb = self.fc_bn1(flat)
+      xb = self.fc_bn2(xb)
 
-        return matrix
+      # initialize as identity
+      init = torch.eye(self.k, requires_grad=True).repeat(bs,1,1)
+      if xb.is_cuda:
+        init=init.cuda()
+      matrix = self.fc3(xb).view(-1,self.k,self.k) + init
+      return matrix
     
 class PointNet(nn.Module):
     def __init__(self):
@@ -86,7 +72,7 @@ class PointNet(nn.Module):
         self.feature_transform = TNet(k=64)
         self.mlp1 = MLP_CONV(3, 64)
         self.mlp2 = MLP_CONV(64, 128)
-        self.conv3 = MLP_CONV(128, 1024)
+        
         # 1D convolutional layer with kernel size 1
         self.conv = nn.Conv1d(128, 1024, 1)
         
