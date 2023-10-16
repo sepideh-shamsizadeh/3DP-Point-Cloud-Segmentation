@@ -67,7 +67,7 @@ def train(pointnet, optimizer, train_loader, val_loader=None, epochs=15, save=Tr
         # save the model
         if save and val_acc > best_val_acc:
             best_val_acc = val_acc
-            path = os.path.join('', "MyDrive", "pointnetmodel.yml")
+            path = os.path.join('', "pointnetmodel.yml")
             print("best_val_acc:", val_acc, "saving model at", path)
             torch.save(pointnet.state_dict(), path)
 
